@@ -53,6 +53,32 @@ export function ensureSchema(): Promise<void> {
   return schemaReady;
 }
 
+/**
+ * The portal's tables and one column each that only the portal's version has.
+ * If a table with the same name is already there without that column, it belongs
+ * to another app that shares the database, and the portal must not touch it.
+ */
+export const OWN_TABLES: Record<string, string> = {
+  settings: 'value', event: 'qualifier_count', suc_competitions: 'qualifier_count', uploads: 'sheet_name',
+  qualifying_rows: 'upload_id', teams: 'qualifying_row_id', draws: 'bracket_size', draw_placements: 'pick_order',
+  match_results: 'sudden_death', match_edits: 'old_value',
+};
+
+/** Names of tables that exist in the database but are not the portal's. */
+export async function foreignTables(c: { query: PoolClient['query'] }): Promise<string[]> {
+  const { rows } = await c.query(
+    `select table_name, column_name from information_schema.columns
+     where table_schema = current_schema() and table_name = any(string_to_array($1, ','))`,
+    [Object.keys(OWN_TABLES).join(',')],
+  );
+  const cols = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (!cols.has(r.table_name)) cols.set(r.table_name, new Set());
+    cols.get(r.table_name)!.add(r.column_name);
+  }
+  return Object.entries(OWN_TABLES).filter(([t, col]) => cols.has(t) && !cols.get(t)!.has(col)).map(([t]) => t);
+}
+
 async function migrate(): Promise<void> {
   const c = await pool().connect();
   try {
@@ -64,6 +90,13 @@ async function migrate(): Promise<void> {
     }
     await c.query('begin');
     await c.query('select pg_advisory_xact_lock(724001)'); // one server at a time
+    const clash = await foreignTables(c);
+    if (clash.length) {
+      throw new Error(
+        `This database already has ${clash.length === 1 ? 'a table' : 'tables'} named ${clash.map((t) => `"${t}"`).join(', ')} that ` +
+        `belong${clash.length === 1 ? 's' : ''} to another app. The portal did not change anything. Connect a Supabase project of its own (see README).`,
+      );
+    }
     await c.query(SCHEMA_SQL);
     await c.query(
       `insert into settings (key, value) values ('schema_version', $1)

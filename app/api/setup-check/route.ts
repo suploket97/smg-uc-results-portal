@@ -5,8 +5,8 @@ import { json } from '@/lib/api';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const TABLES = ['settings', 'competitions', 'event', 'uploads', 'qualifying_rows', 'teams', 'draws', 'draw_placements', 'match_results', 'match_edits'];
-const V2_COLUMNS: [string, string][] = [['competitions', 'f1'], ['draws', 'competition_id'], ['teams', 'team_no'], ['match_results', 'disqualification']];
+const TABLES = ['settings', 'suc_competitions', 'event', 'uploads', 'qualifying_rows', 'teams', 'draws', 'draw_placements', 'match_results', 'match_edits'];
+const V2_COLUMNS: [string, string][] = [['suc_competitions', 'f1'], ['draws', 'competition_id'], ['teams', 'team_no'], ['match_results', 'disqualification']];
 
 // Public, but reveals no secrets: only whether each setting is present and whether the database answers.
 export async function GET() {

@@ -11,7 +11,7 @@ export const SCHEMA_SQL = `-- Samaggi University Challenge — Results Portal
 -- Row Level Security is switched on with no policies: the public anon key
 -- cannot read or write anything.
 
--- Before v4 this single row held the event. v4 copies it into "competitions".
+-- Before v4 this single row held the event. v4 copies it into "suc_competitions".
 create table if not exists event (
   id              int primary key default 1 check (id = 1),
   name            text not null default 'Samaggi University Challenge',
@@ -156,7 +156,9 @@ alter table settings enable row level security;
 -- ---------------------------------------------------------------------------
 -- v4: one row per competition (for example one per year). Starting a new one
 -- keeps every earlier competition, with its teams, draws, results and edit log.
-create table if not exists competitions (
+-- (The table is called suc_competitions because a plain "competitions" table often
+--  exists already when the database is shared with another app.)
+create table if not exists suc_competitions (
   id              bigserial primary key,
   name            text not null default 'Samaggi University Challenge',
   event_date      date,
@@ -166,20 +168,20 @@ create table if not exists competitions (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-alter table competitions enable row level security;
+alter table suc_competitions enable row level security;
 -- The data that existed before v4 becomes the first competition.
-insert into competitions (id, name, event_date, qualifier_count, draw_mode, f1, created_at, updated_at)
+insert into suc_competitions (id, name, event_date, qualifier_count, draw_mode, f1, created_at, updated_at)
   select 1, name, event_date, qualifier_count, draw_mode, f1, updated_at, updated_at from event
-  where id = 1 and not exists (select 1 from competitions);
-insert into competitions (id) select 1 where not exists (select 1 from competitions);
-select setval(pg_get_serial_sequence('competitions', 'id'), (select max(id) from competitions));
+  where id = 1 and not exists (select 1 from suc_competitions);
+insert into suc_competitions (id) select 1 where not exists (select 1 from suc_competitions);
+select setval(pg_get_serial_sequence('suc_competitions', 'id'), (select max(id) from suc_competitions));
 
-alter table uploads add column if not exists competition_id bigint references competitions(id) on delete cascade;
-alter table teams   add column if not exists competition_id bigint references competitions(id) on delete cascade;
-alter table draws   add column if not exists competition_id bigint references competitions(id) on delete cascade;
-update uploads set competition_id = (select min(id) from competitions) where competition_id is null;
-update teams   set competition_id = (select min(id) from competitions) where competition_id is null;
-update draws   set competition_id = (select min(id) from competitions) where competition_id is null;
+alter table uploads add column if not exists competition_id bigint references suc_competitions(id) on delete cascade;
+alter table teams   add column if not exists competition_id bigint references suc_competitions(id) on delete cascade;
+alter table draws   add column if not exists competition_id bigint references suc_competitions(id) on delete cascade;
+update uploads set competition_id = (select min(id) from suc_competitions) where competition_id is null;
+update teams   set competition_id = (select min(id) from suc_competitions) where competition_id is null;
+update draws   set competition_id = (select min(id) from suc_competitions) where competition_id is null;
 alter table uploads alter column competition_id set not null;
 alter table teams   alter column competition_id set not null;
 alter table draws   alter column competition_id set not null;

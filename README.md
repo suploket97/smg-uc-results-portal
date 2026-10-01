@@ -57,6 +57,10 @@ and the latest columns exist, with what to fix for each.
 - **Database errors with your own DATABASE_URL**: use the *Transaction pooler* string (port 6543), with the real
   database password in place of `[YOUR-PASSWORD]`. URL-encode special characters (`@` → `%40`, `#` → `%23`).
 
+- **"This database already has a table named … that belongs to another app"**: the Supabase project is shared with
+  another app that uses the same table name. The portal changes nothing in that case. Connect a Supabase project
+  of its own to the Vercel project, then redeploy.
+
 ## On the day
 
 | Step | Where |

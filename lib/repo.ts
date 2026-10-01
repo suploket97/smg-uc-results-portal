@@ -30,12 +30,12 @@ const CURRENT_KEY = 'current_competition';
 export async function currentCompetitionId(c: Q): Promise<number> {
   const { rows } = await c.query(
     `select coalesce(
-       (select c.id from competitions c join settings s on s.key = $1 and s.value = c.id::text),
-       (select max(id) from competitions)) as id`,
+       (select c.id from suc_competitions c join settings s on s.key = $1 and s.value = c.id::text),
+       (select max(id) from suc_competitions)) as id`,
     [CURRENT_KEY],
   );
   if (rows[0]?.id == null) {
-    const ins = await c.query(`insert into competitions default values returning id`);
+    const ins = await c.query(`insert into suc_competitions default values returning id`);
     return ins.rows[0].id;
   }
   return rows[0].id;
@@ -49,7 +49,7 @@ async function setCurrent(c: Q, id: number) {
 }
 
 export async function getEvent(c: Q, cid: number): Promise<EventInfo> {
-  const rows = (await c.query('select * from competitions where id = $1', [cid])).rows;
+  const rows = (await c.query('select * from suc_competitions where id = $1', [cid])).rows;
   const r = rows[0] ?? { name: 'Samaggi University Challenge', event_date: null, qualifier_count: 8, draw_mode: 'manual', f1: {} };
   return { name: r.name, date: r.event_date, qualifierCount: r.qualifier_count, drawMode: r.draw_mode, f1: { ...EMPTY_F1, ...(r.f1 ?? {}) } };
 }
@@ -64,14 +64,14 @@ export async function competitionAction(body: any) {
       const date = String(body.date ?? '').trim() || null;
       if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new UserError('Invalid date');
       const r = await c.query(
-        `insert into competitions (name, event_date, qualifier_count, draw_mode) values ($1, $2, $3, $4) returning id`,
+        `insert into suc_competitions (name, event_date, qualifier_count, draw_mode) values ($1, $2, $3, $4) returning id`,
         [name, date, ev.qualifierCount, ev.drawMode],
       );
       await setCurrent(c, r.rows[0].id);
       return { id: r.rows[0].id };
     }
     const id = Number(body.id);
-    const row = (await c.query('select id, name from competitions where id = $1', [id])).rows[0];
+    const row = (await c.query('select id, name from suc_competitions where id = $1', [id])).rows[0];
     if (!row) throw new UserError('Competition not found', 404);
     if (action === 'switch') {
       await setCurrent(c, id);
@@ -86,7 +86,7 @@ export async function competitionAction(body: any) {
       await c.query('delete from draws where competition_id = $1', [id]);
       await c.query('delete from teams where competition_id = $1', [id]);
       await c.query('delete from uploads where competition_id = $1', [id]);
-      await c.query('delete from competitions where id = $1', [id]);
+      await c.query('delete from suc_competitions where id = $1', [id]);
       return { id };
     }
     throw new UserError('Unknown action');
@@ -102,7 +102,7 @@ async function competitionList(c: Q, current: number): Promise<CompetitionSummar
       (select t.name from draws d join match_results r on r.draw_id = d.id and r.code = 'F'
          join teams t on t.id = r.winner_id
          where d.competition_id = c.id and d.status <> 'archived' limit 1) as champion
-    from competitions c order by c.event_date desc nulls first, c.id desc`);
+    from suc_competitions c order by c.event_date desc nulls first, c.id desc`);
   return rows.map((r: any) => ({
     id: r.id, name: r.name, date: r.event_date, createdAt: iso(r.created_at)!, current: r.id === current,
     teamCount: r.team_count, resultCount: r.result_count, champion: r.champion ?? null,
@@ -146,7 +146,7 @@ export async function updateEvent(input: Partial<EventInfo>): Promise<void> {
   if (mode !== 'manual' && mode !== 'random') throw new UserError('Invalid draw mode');
   const f1 = input.f1 === undefined ? cur.f1 : cleanF1(input.f1, cur.f1);
   await c.query(
-    `update competitions set name = $1, event_date = $2, qualifier_count = $3, draw_mode = $4, f1 = $5, updated_at = now() where id = $6`,
+    `update suc_competitions set name = $1, event_date = $2, qualifier_count = $3, draw_mode = $4, f1 = $5, updated_at = now() where id = $6`,
     [name, date, qc, mode, JSON.stringify(f1), cid],
   );
   });
@@ -217,7 +217,7 @@ export async function importStandings(file: { name: string; type: string; data: 
       cutDecidedBy: s.cutDecidedBy ?? (s.cutLevel === 'no' ? null : ev.f1.cutDecidedBy),
     };
     await c.query(
-      `update competitions set f1 = $1, event_date = coalesce(event_date, $2::date), updated_at = now() where id = $3`,
+      `update suc_competitions set f1 = $1, event_date = coalesce(event_date, $2::date), updated_at = now() where id = $3`,
       [JSON.stringify(f1), s.date, cid],
     );
     return uploadId;
@@ -527,7 +527,7 @@ export async function buildState(admin: boolean, viewId?: number | null): Promis
     const current = await currentCompetitionId(c);
     let cid = current;
     if (viewId != null && viewId !== current) {
-      const ok = (await c.query('select 1 from competitions where id = $1', [viewId])).rows.length;
+      const ok = (await c.query('select 1 from suc_competitions where id = $1', [viewId])).rows.length;
       if (!ok) throw new UserError('Competition not found', 404);
       cid = viewId;
     }
