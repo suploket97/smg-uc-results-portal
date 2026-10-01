@@ -6,11 +6,14 @@ import { firstRoundCode, slotLabel } from '@/lib/bracket';
 import { matchLabel } from '@/lib/labels';
 import type { AppState, Placement } from '@/lib/types';
 
-// Reveal timeline (ms). Same animation for manual and random draws.
-const SPIN_MS = 1900;
-const SLOT_AT = 2700;
-const OUT_AT = 6200;
-const END_AT = 6700;
+// Reveal timelines (ms).
+// Random draw: names spin first, because the computer is doing the drawing.
+// Lots from a box: no spin. The room has already heard the lot read out, so the
+// name appears straight away with its slot, then drops into the bracket.
+const TIMELINE = {
+  random: { spin: 1900, slot: 2700, out: 6200, end: 6700 },
+  manual: { spin: 0, slot: 500, out: 3300, end: 3800 },
+} as const;
 
 type Phase = 'spin' | 'land' | 'slot' | 'out';
 
@@ -66,19 +69,25 @@ export default function DrawScreen() {
     const placedBefore = new Set(st.draw.placements.filter((x) => x.pickOrder < p.pickOrder).map((x) => x.teamId));
     const pool = st.teams.filter((t) => t.selected && !placedBefore.has(t.id)).map((t) => t.name);
     if (!pool.length) pool.push(p.teamName);
-    setCurrent({ p, phase: 'spin', spinName: pool[0] });
-    let i = 0;
-    const spin = setInterval(() => {
-      i++;
-      setCurrent((c) => (c && c.phase === 'spin' ? { ...c, spinName: pool[i % pool.length] } : c));
-    }, 85);
+    const t = TIMELINE[p.method === 'random' ? 'random' : 'manual'];
+    let spin: ReturnType<typeof setInterval> | undefined;
+    if (t.spin > 0) {
+      setCurrent({ p, phase: 'spin', spinName: pool[0] });
+      let i = 0;
+      spin = setInterval(() => {
+        i++;
+        setCurrent((c) => (c && c.phase === 'spin' ? { ...c, spinName: pool[i % pool.length] } : c));
+      }, 85);
+    } else {
+      setCurrent({ p, phase: 'land', spinName: p.teamName });
+    }
     const timers = [
-      setTimeout(() => { clearInterval(spin); setCurrent((c) => c && { ...c, phase: 'land' }); }, SPIN_MS),
-      setTimeout(() => setCurrent((c) => c && { ...c, phase: 'slot' }), SLOT_AT),
-      setTimeout(() => setCurrent((c) => c && { ...c, phase: 'out' }), OUT_AT),
-      setTimeout(() => { setFresh(p.pickOrder); setCurrent(null); setQueue((q) => q.slice(1)); }, END_AT),
+      ...(t.spin > 0 ? [setTimeout(() => { clearInterval(spin); setCurrent((c) => c && { ...c, phase: 'land' }); }, t.spin)] : []),
+      setTimeout(() => setCurrent((c) => c && { ...c, phase: 'slot' }), t.slot),
+      setTimeout(() => setCurrent((c) => c && { ...c, phase: 'out' }), t.out),
+      setTimeout(() => { setFresh(p.pickOrder); setCurrent(null); setQueue((q) => q.slice(1)); }, t.end),
     ];
-    return () => { clearInterval(spin); timers.forEach(clearTimeout); setCurrent(null); };
+    return () => { if (spin) clearInterval(spin); timers.forEach(clearTimeout); setCurrent(null); };
   }, [head?.pickOrder, head?.slot, head?.teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawNext = useCallback(async () => {

@@ -94,6 +94,7 @@ The paper forms (F1–F4, v2026-10) stay the signed official record; the portal 
 **Upgrading a database from the first version:** run `supabase/schema.sql` again. The `v2` block at the end only adds the new columns.
 
 ### How the rules work
+- **Draw screen:** with lots from a box, each lot appears straight away with its slot (no spinning names, since the room has already heard it). With the on-screen random draw, names spin for about 2 seconds first, because the computer is doing the drawing.
 - **Bracket size:** 2–16 teams. 8 → QF1–QF4, SF1–SF2, 3RD, F. 3–4 → SF + Final. 9–16 → Round of 16 (`R16-1…8`) first.
 - **Byes** sit in fixed slots, spread across both halves (6 teams: slots 2 and 7, so QF1 and QF4). Bye teams advance automatically; lots fill only the real slots.
 - **Order of play:** first round in order, then SF1, SF2, third place, Final. "Next match" is the first one ready in that order.
