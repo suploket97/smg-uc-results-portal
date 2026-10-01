@@ -4,6 +4,33 @@ import { AdminShell, Loading, useToast } from '@/components/AdminShell';
 import { useAppState, post } from '@/lib/client';
 import type { EventInfo } from '@/lib/types';
 
+function PasswordCard({ toast }: { toast: ReturnType<typeof useToast> }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const r = await post('/api/admin/password', { current, next });
+    setBusy(false);
+    if (r.ok) { setCurrent(''); setNext(''); toast.show('Password changed'); }
+    else toast.show(r.error || 'Error', 'err');
+  }
+  return (
+    <form className="card stack" onSubmit={save}>
+      <h2>Admin password</h2>
+      <p className="small muted">Stored as a hash in the database. Everyone signed in stays signed in.</p>
+      <label className="field"><span>Current password</span>
+        <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+      </label>
+      <label className="field"><span>New password (at least 8 characters)</span>
+        <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+      </label>
+      <button className="btn-primary" disabled={busy || !current || next.trim().length < 8}>Change password</button>
+    </form>
+  );
+}
+
 export default function SetupPage() {
   const { state, setState, error } = useAppState({ admin: true });
   const [f, setF] = useState<EventInfo | null>(null);
@@ -47,6 +74,7 @@ export default function SetupPage() {
         </div>
         <button className="btn-primary btn-big" disabled={busy}>{busy ? '…' : 'Save'}</button>
       </form>
+      <PasswordCard toast={toast} />
       {toast.node}
     </AdminShell>
   );

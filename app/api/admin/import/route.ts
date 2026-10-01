@@ -1,6 +1,6 @@
 import { importStandings } from '@/lib/repo';
 import { parseStandings, suggestF1 } from '@/lib/importer';
-import { adminAction, json, errorResponse } from '@/lib/api';
+import { adminAction, json, errorResponse, requireAdmin } from '@/lib/api';
 import { UserError } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +10,8 @@ const MAX_BYTES = 4 * 1024 * 1024; // Vercel's request limit is 4.5 MB
 
 // multipart form: file=<.xlsx|.csv>, preview=1 to only parse
 export async function POST(req: Request) {
+  const denied = await requireAdmin(req);
+  if (denied) return denied;
   let form: FormData;
   try {
     form = await req.formData();

@@ -1,20 +1,16 @@
 import { query, databaseUrl, DB_ENV_NAMES } from '@/lib/db';
+import { passwordSource } from '@/lib/auth';
 import { json } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const TABLES = ['event', 'uploads', 'qualifying_rows', 'teams', 'draws', 'draw_placements', 'match_results', 'match_edits'];
+const TABLES = ['settings', 'event', 'uploads', 'qualifying_rows', 'teams', 'draws', 'draw_placements', 'match_results', 'match_edits'];
 const V2_COLUMNS: [string, string][] = [['event', 'f1'], ['teams', 'team_no'], ['match_results', 'disqualification']];
 
 // Public, but reveals no secrets: only whether each setting is present and whether the database answers.
 export async function GET() {
   const checks: { name: string; ok: boolean; detail: string }[] = [];
-  checks.push({
-    name: 'ADMIN_PASSWORD',
-    ok: !!process.env.ADMIN_PASSWORD,
-    detail: process.env.ADMIN_PASSWORD ? 'Set' : 'Missing. Add it in Vercel → Settings → Environment Variables, then redeploy.',
-  });
   const found = databaseUrl();
   const url = found?.value;
   let urlOk = false;
@@ -43,7 +39,7 @@ export async function GET() {
       const missing = TABLES.filter((t) => !have.has(t));
       checks.push({
         name: 'Tables', ok: missing.length === 0,
-        detail: missing.length ? `Missing: ${missing.join(', ')}. Run supabase/schema.sql in the Supabase SQL Editor.` : 'All present',
+        detail: missing.length ? `Missing: ${missing.join(', ')}. Run supabase/schema.sql in the Supabase SQL Editor (it only adds what is missing).` : 'All present',
       });
       if (!missing.length) {
         const cols = await query<{ table_name: string; column_name: string }>(
@@ -66,5 +62,13 @@ export async function GET() {
       checks.push({ name: 'Database connection', ok: false, detail: `${msg}.${hint}` });
     }
   }
+  const src = urlOk ? await passwordSource() : (process.env.ADMIN_PASSWORD ? 'env' : 'none');
+  checks.push({
+    name: 'Admin password',
+    ok: src !== 'none',
+    detail: src === 'env' ? 'Set by the ADMIN_PASSWORD environment variable'
+      : src === 'database' ? 'Set in the database (settings table)'
+      : "Not set. In Supabase → SQL Editor run: insert into settings (key, value) values ('admin_password', 'your-password') on conflict (key) do update set value = excluded.value;",
+  });
   return json({ ok: checks.every((c) => c.ok), checks });
 }

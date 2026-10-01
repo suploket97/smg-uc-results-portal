@@ -6,56 +6,57 @@ Stack: Next.js 15 (TypeScript) + Supabase Postgres, deployed on Vercel's free ti
 
 ---
 
-## Setup (about 15 minutes)
+## Setup (about 10 minutes, no Vercel settings needed)
 
-### 1. Supabase: create the tables
-1. Create a project at supabase.com (free tier is fine). Note the **database password**.
+### 1. Supabase
+1. Create a project at supabase.com (free tier is fine).
 2. Open **SQL Editor → New query**, paste the whole of `supabase/schema.sql`, and press **Run**.
-   It is safe to run again later.
-3. Click **Connect** (top of the project page) → **Transaction pooler**. Copy the connection string
-   (it ends in `:6543/postgres`) and put your database password in place of `[YOUR-PASSWORD]`.
-   This is your `DATABASE_URL`.
+   It is safe to run again later; it only adds what is missing.
+3. Set the admin password. In the SQL Editor run this one line, with your own password in the quotes:
+   ```sql
+   insert into settings (key, value) values ('admin_password', 'your-password')
+   on conflict (key) do update set value = excluded.value, updated_at = now();
+   ```
+   The app replaces it with a salted hash the first time someone signs in. Run the same line again to
+   reset a forgotten password. Once signed in, you can also change it on **Setup**.
 
-### 2. GitHub
-Unzip this folder, then push it to a new repository (GitHub Desktop: *Add existing repository* → *Publish*;
-or `git init && git add . && git commit -m "Results portal" && git push`).
+### 2. GitHub and Vercel
+1. Push this folder to a GitHub repository.
+2. In Vercel: **Add New → Project →** import the repository.
+3. Connect the database: in the Vercel project open **Storage** (or **Integrations**) → **Supabase** →
+   connect it to the project from step 1. This adds `POSTGRES_URL` for you; the app reads it automatically.
+4. Deploy, then open `https://<your-app>.vercel.app/setup-check`. When every line says OK, go to `/admin`.
 
-### 3. Vercel
-1. **Add New → Project →** import the GitHub repository. Framework is detected as Next.js.
-2. Under **Environment Variables** add:
+Optional environment variables, only if you prefer them to the database settings:
 
-   | Name | Value |
-   |---|---|
-   | `DATABASE_URL` | the Supabase Transaction pooler string from step 1. Not needed if you connected Supabase through Vercel's Supabase integration: the app then uses the `POSTGRES_URL` it creates. |
-   | `ADMIN_PASSWORD` | the one admin password |
-   | `CRON_SECRET` | optional, any long random text (protects the keep-alive URL) |
-   | `EVENT_TIMEZONE` | optional, default `Europe/London` (times in the Excel export) |
-
-3. **Deploy.** Open `https://<your-app>.vercel.app/admin` and sign in.
+| Name | Use |
+|---|---|
+| `DATABASE_URL` | A Supabase *Transaction pooler* string (port 6543), instead of the integration's `POSTGRES_URL`. |
+| `ADMIN_PASSWORD` | If set, this password is used instead of the one in the `settings` table. |
+| `CRON_SECRET` | Protects the daily keep-alive URL. |
+| `EVENT_TIMEZONE` | Time zone for times in the Excel export (default `Europe/London`). |
 
 `vercel.json` adds a daily cron that calls `/api/keepalive`, so the free Supabase project never sits idle
-for 7 days. Vercel shows it under **Settings → Cron Jobs**.
+for 7 days.
 
 ### Run on your own computer (optional)
 ```bash
 npm install
-cp .env.example .env.local     # fill in DATABASE_URL and ADMIN_PASSWORD
+cp .env.example .env.local     # fill in DATABASE_URL
 npm run dev                    # http://localhost:3000
 npm test                       # bracket, import and Excel tests
 ```
 
----
-
 ### If something does not work: `/setup-check`
 Open `https://<your-app>.vercel.app/setup-check`. It shows, without revealing any password, whether
-`ADMIN_PASSWORD` and `DATABASE_URL` are set, whether the database answers, and whether the tables
+a database connection string is set, whether the database answers, whether an admin password exists, and whether the tables
 and the latest columns exist, with what to fix for each.
 
-- **"Login failed" / "ADMIN_PASSWORD is not set"**: add `ADMIN_PASSWORD` in Vercel, then **redeploy**
-  (Deployments → ⋯ → Redeploy). Vercel only applies new environment variables to new deployments.
-- **"Wrong password"**: the password typed differs from `ADMIN_PASSWORD`.
-- **Database errors**: use the *Transaction pooler* string (port 6543), with the real database password
-  in place of `[YOUR-PASSWORD]`. URL-encode special characters in that password (`@` → `%40`, `#` → `%23`).
+- **"No admin password has been set"**: run the `insert into settings …` line from Setup step 1.3.
+- **"Wrong password"**: the password typed differs from the one set in the `settings` table (or `ADMIN_PASSWORD`, if that is set).
+- **No database connection string**: connect Supabase to the Vercel project (Storage → Supabase), then redeploy.
+- **Database errors with your own DATABASE_URL**: use the *Transaction pooler* string (port 6543), with the real
+  database password in place of `[YOUR-PASSWORD]`. URL-encode special characters (`@` → `%40`, `#` → `%23`).
 
 ## On the day
 

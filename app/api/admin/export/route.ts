@@ -1,10 +1,12 @@
 import { buildExport } from '@/lib/exporter';
-import { errorResponse } from '@/lib/api';
+import { errorResponse, requireAdmin } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await requireAdmin(req);
+  if (denied) return denied;
   try {
     const { buffer, filename } = await buildExport();
     return new Response(new Uint8Array(buffer), {

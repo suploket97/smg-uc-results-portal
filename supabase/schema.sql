@@ -137,3 +137,18 @@ alter table match_results   add column if not exists start_time text;           
 alter table match_results   add column if not exists end_time text;                         -- F3 เวลาจบ · End
 alter table match_results   add column if not exists last_question int;                     -- F3 ข้อสุดท้ายที่เล่น
 alter table match_results   add column if not exists f4_entries text;                       -- F3 เลขรายการ F4
+
+-- ---------------------------------------------------------------------------
+-- v3: settings kept in the database, so nothing has to be set in Vercel.
+create table if not exists settings (
+  key        text primary key,
+  value      text not null,
+  updated_at timestamptz not null default now()
+);
+alter table settings enable row level security;
+
+-- ===> Set the admin password: change the text in quotes, then run this line. <===
+-- (The app replaces it with a salted hash the first time someone signs in.
+--  Run it again later to reset a forgotten password. If the ADMIN_PASSWORD
+--  environment variable is set in Vercel, that one is used instead.)
+-- insert into settings (key, value) values ('admin_password', 'CHANGE-ME') on conflict (key) do update set value = excluded.value, updated_at = now();

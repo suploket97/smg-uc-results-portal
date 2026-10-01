@@ -1,11 +1,13 @@
 import { getUploadFile } from '@/lib/repo';
-import { json } from '@/lib/api';
+import { json, requireAdmin } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 // Downloads an original uploaded file again: /api/admin/upload-file?id=3
 export async function GET(req: Request) {
+  const denied = await requireAdmin(req);
+  if (denied) return denied;
   const id = Number(new URL(req.url).searchParams.get('id'));
   const f = id ? await getUploadFile(id) : null;
   if (!f) return json({ ok: false, error: 'File not found' }, 404);
