@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseStandings, suggestF1 } from '../lib/importer';
 import { readWorkbook, writeWorkbook } from '../lib/xlsx';
+import { SCHEMA_SQL } from '../lib/schema';
 
 const fixture = (n: string) => readFileSync(join(__dirname, 'fixtures', n));
 
@@ -65,4 +66,8 @@ test('reads a Team No. column and spots a tie at the cut', () => {
   assert.equal(f1.cutLevel, 'yes');
   assert.equal(f1.cutDecidedBy, 'time');
   assert.equal(f1.teamsPlayed, 3);
+});
+
+test('the SQL the app runs by itself matches supabase/schema.sql', () => {
+  assert.equal(SCHEMA_SQL, readFileSync(join(__dirname, '..', 'supabase', 'schema.sql'), 'utf8'));
 });

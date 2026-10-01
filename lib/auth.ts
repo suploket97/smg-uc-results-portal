@@ -89,6 +89,16 @@ export async function checkPassword(input: string): Promise<boolean | null> {
   return ok;
 }
 
+/** First-run setup: stores a password only if none exists yet. Returns false if one was set meanwhile. */
+export async function createFirstPassword(pw: string): Promise<boolean> {
+  if (process.env.ADMIN_PASSWORD) return false;
+  const rows = await query(
+    `insert into settings (key, value) values ('admin_password', $1) on conflict (key) do nothing returning key`,
+    [hashPassword(pw.trim())],
+  );
+  return rows.length > 0;
+}
+
 export async function changePassword(current: string, next: string): Promise<string | null> {
   if (process.env.ADMIN_PASSWORD) return 'The password is set by the ADMIN_PASSWORD environment variable, so it cannot be changed here.';
   const ok = await checkPassword(current);

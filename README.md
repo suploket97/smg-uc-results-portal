@@ -6,28 +6,27 @@ Stack: Next.js 15 (TypeScript) + Supabase Postgres, deployed on Vercel's free ti
 
 ---
 
-## Setup (about 10 minutes, no Vercel settings needed)
+## Setup (about 5 minutes, no Vercel settings and no SQL needed)
 
-### 1. Supabase
-1. Create a project at supabase.com (free tier is fine).
-2. Open **SQL Editor → New query**, paste the whole of `supabase/schema.sql`, and press **Run**.
-   It is safe to run again later; it only adds what is missing.
-3. Set the admin password. In the SQL Editor run this one line, with your own password in the quotes:
-   ```sql
-   insert into settings (key, value) values ('admin_password', 'your-password')
-   on conflict (key) do update set value = excluded.value, updated_at = now();
-   ```
-   The app replaces it with a salted hash the first time someone signs in. Run the same line again to
-   reset a forgotten password. Once signed in, you can also change it on **Setup**.
-
-### 2. GitHub and Vercel
 1. Push this folder to a GitHub repository.
 2. In Vercel: **Add New → Project →** import the repository.
-3. Connect the database: in the Vercel project open **Storage** (or **Integrations**) → **Supabase** →
-   connect it to the project from step 1. This adds `POSTGRES_URL` for you; the app reads it automatically.
-4. Deploy, then open `https://<your-app>.vercel.app/setup-check`. When every line says OK, go to `/admin`.
+3. Connect the database: in the Vercel project open **Storage** (or **Integrations**) → **Supabase** and connect a
+   Supabase project. This adds `POSTGRES_URL`; the app reads it automatically.
+4. Deploy, then open `https://<your-app>.vercel.app/admin/login`.
+   - On first use the app **creates its own tables** in that Supabase project (and upgrades them after an update).
+   - If no admin password exists yet, the page asks you to **create one**. Do this straight after deploying:
+     the first person to open the page sets it. You can change it later on **Setup**.
+5. `https://<your-app>.vercel.app/setup-check` shows that everything is in place.
 
-Optional environment variables, only if you prefer them to the database settings:
+`supabase/schema.sql` is the same SQL the app runs by itself. You only need it if you want to create the
+tables by hand. To reset a forgotten password, run this in the Supabase SQL Editor of the connected project,
+then sign in with the new password:
+```sql
+insert into settings (key, value) values ('admin_password', 'new-password')
+on conflict (key) do update set value = excluded.value, updated_at = now();
+```
+
+Optional environment variables (none are required):
 
 | Name | Use |
 |---|---|
@@ -52,7 +51,7 @@ Open `https://<your-app>.vercel.app/setup-check`. It shows, without revealing an
 a database connection string is set, whether the database answers, whether an admin password exists, and whether the tables
 and the latest columns exist, with what to fix for each.
 
-- **"No admin password has been set"**: run the `insert into settings …` line from Setup step 1.3.
+- **"relation … does not exist"**: you are running an older version of the app. Deploy this version; it creates the tables itself.
 - **"Wrong password"**: the password typed differs from the one set in the `settings` table (or `ADMIN_PASSWORD`, if that is set).
 - **No database connection string**: connect Supabase to the Vercel project (Storage → Supabase), then redeploy.
 - **Database errors with your own DATABASE_URL**: use the *Transaction pooler* string (port 6543), with the real

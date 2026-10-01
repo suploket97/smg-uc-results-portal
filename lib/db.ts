@@ -1,4 +1,5 @@
 import { Pool, PoolClient, types } from 'pg';
+import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
 
 // bigint/numeric come back as strings by default; our values are small.
 types.setTypeParser(20, (v: string) => Number(v)); // int8
@@ -42,12 +43,50 @@ export function pool(): Pool {
   return g.__samaggiPool;
 }
 
+// ------------------------------------------------------------------ self-setup
+
+let schemaReady: Promise<void> | null = null;
+
+/** Creates or upgrades the tables once per server start. Cheap after the first time. */
+export function ensureSchema(): Promise<void> {
+  if (!schemaReady) schemaReady = migrate().catch((e) => { schemaReady = null; throw e; });
+  return schemaReady;
+}
+
+async function migrate(): Promise<void> {
+  const c = await pool().connect();
+  try {
+    // two steps: a query that names a missing table fails before it runs
+    const has = await c.query(`select to_regclass('public.settings') is not null as ok`);
+    if (has.rows[0]?.ok) {
+      const cur = await c.query(`select value from settings where key = 'schema_version'`);
+      if (cur.rows[0]?.value === SCHEMA_VERSION) return;
+    }
+    await c.query('begin');
+    await c.query('select pg_advisory_xact_lock(724001)'); // one server at a time
+    await c.query(SCHEMA_SQL);
+    await c.query(
+      `insert into settings (key, value) values ('schema_version', $1)
+       on conflict (key) do update set value = excluded.value, updated_at = now()`,
+      [SCHEMA_VERSION],
+    );
+    await c.query('commit');
+  } catch (e) {
+    await c.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
 export async function query<T = any>(sql: string, params: unknown[] = []): Promise<T[]> {
+  await ensureSchema();
   const res = await pool().query(sql, params as any[]);
   return res.rows as T[];
 }
 
 export async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+  await ensureSchema();
   const c = await pool().connect();
   try {
     await c.query('begin');

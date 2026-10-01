@@ -1,4 +1,4 @@
-import { query, databaseUrl, DB_ENV_NAMES } from '@/lib/db';
+import { query, databaseUrl, DB_ENV_NAMES, ensureSchema } from '@/lib/db';
 import { passwordSource } from '@/lib/auth';
 import { json } from '@/lib/api';
 
@@ -19,7 +19,8 @@ export async function GET() {
     try {
       const u = new URL(url);
       urlOk = true;
-      urlDetail = `Using ${found!.name} (host ${u.hostname}, port ${u.port || '5432'})`;
+      const ref = u.hostname.includes('supabase') ? (decodeURIComponent(u.username).split('.')[1] || u.hostname.split('.')[1] || '') : '';
+      urlDetail = `Using ${found!.name} (host ${u.hostname}, port ${u.port || '5432'}${ref ? `, Supabase project ref ${ref}` : ''})`;
       if (url.includes('[YOUR-PASSWORD]')) { urlOk = false; urlDetail = 'Still contains [YOUR-PASSWORD]. Put the database password in its place.'; }
       else if (u.hostname.startsWith('db.') && u.hostname.endsWith('.supabase.co')) {
         urlDetail += '. This is the direct connection, which Vercel often cannot reach (IPv6). Use the Transaction pooler string instead.';
@@ -30,8 +31,8 @@ export async function GET() {
 
   if (urlOk) {
     try {
-      await query('select 1');
-      checks.push({ name: 'Database connection', ok: true, detail: 'Connected' });
+      await ensureSchema(); // creates or upgrades the tables if needed
+      checks.push({ name: 'Database connection', ok: true, detail: 'Connected; tables created or upgraded if they were missing' });
       const rows = await query<{ table_name: string }>(
         `select table_name from information_schema.tables where table_schema = 'public' and table_name = any(string_to_array($1, ','))`, [TABLES.join(',')],
       );
@@ -68,7 +69,7 @@ export async function GET() {
     ok: src !== 'none',
     detail: src === 'env' ? 'Set by the ADMIN_PASSWORD environment variable'
       : src === 'database' ? 'Set in the database (settings table)'
-      : "Not set. In Supabase → SQL Editor run: insert into settings (key, value) values ('admin_password', 'your-password') on conflict (key) do update set value = excluded.value;",
+      : 'Not set yet. Open /admin/login and create it there.',
   });
   return json({ ok: checks.every((c) => c.ok), checks });
 }
