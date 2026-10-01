@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Wordmark } from '@/components/Wordmark';
 
 export default function LoginPage() {
   const [pw, setPw] = useState('');
@@ -43,7 +44,7 @@ export default function LoginPage() {
     <div className="login-wrap">
       <form className="card stack" onSubmit={submit}>
         <h1>{setup ? 'Create admin password' : 'Admin'}</h1>
-        <p className="muted small">Samaggi University Challenge — Results Portal</p>
+        <p className="small"><Wordmark className="wm-sm" /> <span className="muted">· Results Portal</span></p>
         {setup && (
           <div className="notice info small">
             No admin password has been set yet. Choose one now (at least 8 characters). Everyone who runs the

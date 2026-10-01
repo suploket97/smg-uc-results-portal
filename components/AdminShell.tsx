@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { post } from '@/lib/client';
 import type { AppState } from '@/lib/types';
+import { Wordmark } from './Wordmark';
 
 const NAV = [
   { href: '/admin', label: 'Overview' },
@@ -20,7 +21,7 @@ export function AdminShell({ state, children }: { state: AppState | null; childr
     <>
       <header className="admin-top">
         <div className="bar">
-          <div className="brand">{state?.event.name ?? 'Samaggi University Challenge'}</div>
+          <div className="brand"><Wordmark name={state?.event.name} /></div>
           <div className="spacer" />
           <Link className="btn btn-sm btn-ghost" href="/screen" target="_blank">Screens ↗</Link>
           <button

@@ -2,6 +2,7 @@
 // Printable record forms, laid out like "Record forms F1–F4 (EN)", v2026-10.
 // The portal fills in what it knows; signatures and anything it does not record
 // (clock stops, voided questions, judge's remarks …) are left blank to complete in pen.
+import { useEffect, useState } from 'react';
 import { useAppState } from '@/lib/client';
 import { slotLabel, decidedBy, bracketSkeleton, type BracketMatch, type Source } from '@/lib/bracket';
 import { matchLabel, fmtDate, fmtTime } from '@/lib/labels';
@@ -69,13 +70,33 @@ function srcText(src: Source) {
 
 const ROUND_HEAD: Record<string, string> = { R16: 'Round of 16', QF: 'Quarterfinals', SF: 'Semifinals', F: 'Final / Third place' };
 
+type FormSel = 'all' | 'f1' | 'f2' | 'f3';
+
 export default function PrintPage() {
   const { state, error } = useAppState();
+  // which form to show: /print?form=f1 | f2 | f3 [&match=QF1] (default: all)
+  const [sel, setSel] = useState<{ form: FormSel; match: string }>({ form: 'all', match: '' });
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const f = sp.get('form');
+    setSel({ form: f === 'f1' || f === 'f2' || f === 'f3' ? f : 'all', match: (sp.get('match') ?? '').toUpperCase() });
+  }, []);
+  const choose = (form: FormSel, match = '') => {
+    setSel({ form, match });
+    const q = form === 'all' ? '' : `?form=${form}${match ? `&match=${match}` : ''}`;
+    try { window.history.replaceState(null, '', `${window.location.pathname}${q}`); } catch { /* not allowed in some embeds */ }
+  };
+  // the browser uses the page title as the file name for "Save as PDF"
+  useEffect(() => {
+    const name = state?.event.name ?? 'Samaggi University Challenge';
+    const part = sel.form === 'all' ? 'F1-F3' : sel.form === 'f1' ? 'F1 Qualifying' : sel.form === 'f2' ? 'F2 Draw' : sel.match ? `F3 ${sel.match}` : 'F3 Matches';
+    document.title = `${name} - ${part}`;
+  }, [sel, state?.event.name]);
   if (!state) return <div className="print-page">{error ?? 'Loading…'}</div>;
-  return <Forms state={state} />;
+  return <Forms state={state} sel={sel} choose={choose} />;
 }
 
-function Forms({ state }: { state: AppState }) {
+function Forms({ state, sel, choose }: { state: AppState; sel: { form: FormSel; match: string }; choose: (f: FormSel, m?: string) => void }) {
   const b = state.bracket;
   const d = state.draw;
   const f1 = state.event.f1;
@@ -85,16 +106,36 @@ function Forms({ state }: { state: AppState }) {
   const qualified = state.teams.filter((t) => t.selected);
   const byRow = new Map(state.standings.map((s) => [s.rowId, s]));
   const date = fmtDate(state.event.date);
-  const played = b && d?.status === 'locked' ? b.matches.filter((m) => m.status === 'done') : [];
+  const allPlayed = b && d?.status === 'locked' ? b.matches.filter((m) => m.status === 'done') : [];
+  const played = sel.match ? allPlayed.filter((m) => m.code === sel.match) : allPlayed;
+  const show = (f: 'f1' | 'f2' | 'f3') => sel.form === 'all' || sel.form === f;
+  const xlsx = (f: string, m?: string) => `/api/admin/export?form=${f}${m ? `&match=${m}` : ''}`;
 
   return (
     <div className="print-page fd">
       <div className="no-print fd-toolbar">
-        <button className="btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
-        <span>Forms F1–F3 ({VERSION}), filled from the portal. Sign the printed copies in pen. F4 and the per-question F3 sheets stay on paper.</span>
+        <div className="fd-pick" role="group" aria-label="Form to export">
+          {(['all', 'f1', 'f2', 'f3'] as const).map((f) => (
+            <button key={f} className={sel.form === f && !sel.match ? 'on' : ''} onClick={() => choose(f)}>
+              {f === 'all' ? 'All forms' : f === 'f1' ? 'F1 Qualifying' : f === 'f2' ? 'F2 Draw' : 'F3 All matches'}
+            </button>
+          ))}
+          {allPlayed.length > 0 && (
+            <select aria-label="One F3 match" value={sel.form === 'f3' ? sel.match : ''} onChange={(e) => choose('f3', e.target.value)}>
+              <option value="">F3 one match…</option>
+              {allPlayed.map((m) => <option key={m.code} value={m.code}>F3 · {m.code}</option>)}
+            </select>
+          )}
+        </div>
+        <div className="fd-pick">
+          <button className="btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
+          <a className="btn" href={xlsx(sel.form, sel.form === 'f3' ? sel.match : '')}>Download Excel</a>
+        </div>
+        <span>Showing {sel.form === 'all' ? 'F1, F2 and F3' : sel.form.toUpperCase()}{sel.match ? ` · ${sel.match}` : ''} ({VERSION}). Sign the printed copies in pen. F4 and the per-question F3 sheets stay on paper.</span>
       </div>
 
       {/* ================================================================ F1 */}
+      {show('f1') && <>
       <article className="fd-page">
         <Head code="F1" title="Qualifying round result certificate" />
         <div className="fd-grid4">
@@ -183,8 +224,10 @@ function Forms({ state }: { state: AppState }) {
           <Foot code="F1" page="Attachment" />
         </article>
       )}
+      </>}
 
       {/* ================================================================ F2 */}
+      {show('f2') && (
       <article className="fd-page">
         <Head code="F2" title="Draw record" />
         <div className="fd-grid4">
@@ -237,9 +280,13 @@ function Forms({ state }: { state: AppState }) {
         </div>
         <Foot code="F2" page="1 / 1" />
       </article>
+      )}
 
       {/* ================================================================ F3 (result page, one per match) */}
-      {played.map((m) => <F3Result key={m.code} m={m} both={both} />)}
+      {show('f3') && played.map((m) => <F3Result key={m.code} m={m} both={both} />)}
+      {show('f3') && !played.length && (
+        <article className="fd-page no-print"><Head code="F3" title="Buzzer match record: result" /><p>No match has a result yet.</p></article>
+      )}
     </div>
   );
 }

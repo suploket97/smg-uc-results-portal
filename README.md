@@ -66,7 +66,7 @@ and the latest columns exist, with what to fix for each.
 | Tick/untick qualifiers, fix names, or type teams by hand | `/admin/teams` |
 | Draw: manual (lots from a box) or random on screen | `/admin/draw` |
 | Enter scores, Sudden Death, Walkover; edit or clear results | `/admin/matches` |
-| Download everything (F1, F2, F3 tabs plus full Standings and the edit log) | Overview → **Download Excel** |
+| Export one form or all of them, as PDF (print) or Excel | Overview → **Export**, or `/print` (pick a form at the top). One match's F3: **Matches** → open the match → F3 PDF / F3 Excel |
 | Printable results / save as PDF | `/print` |
 
 **Projector pages** (public, no login, refresh themselves every few seconds; double-click for full screen):
@@ -89,7 +89,7 @@ The paper forms (F1–F4, v2026-10) stay the signed official record; the portal 
 
 **Team No.** is read from a `Team No.` column in the Standings tab (also accepted: `Team number`, `No.`, `เลขทีม`). If the file has none, type numbers on the Teams page, or start hand-typed teams with the number (`7 Oxford Siam`).
 
-`/print` reproduces the English forms F1–F3 (v2026-10) with every signature box (F1: host, chief judge, judge; F2: chief judge and two witnesses; F3: scorer, judge, quiz master and both captains). The portal fills in what it knows; signatures and fields it does not record (clock stops, voided questions, manual score changes, judge's remarks) are left blank for pen. Print one F3 result page per played match, plus the full Standings tab as the F1 attachment. The Excel export is also laid out like F1, F2 and F3 (Excel tabs: F1 Qualifying, Standings (full), F2 Draw, F3 Matches, Edit log, Draw history).
+`/print` (or `/print?form=f1`, `f2`, `f3`, `f3&match=SF1`) reproduces the English forms F1–F3 (v2026-10) with every signature box (F1: host, chief judge, judge; F2: chief judge and two witnesses; F3: scorer, judge, quiz master and both captains). The portal fills in what it knows; signatures and fields it does not record (clock stops, voided questions, manual score changes, judge's remarks) are left blank for pen. Print one F3 result page per played match, plus the full Standings tab as the F1 attachment. The Excel export follows the same split: `/api/admin/export?form=f1|f2|f3[&match=QF1]`, or no form for everything. It is also laid out like F1, F2 and F3 (Excel tabs: F1 Qualifying, Standings (full), F2 Draw, F3 Matches, Edit log, Draw history).
 
 **Upgrading a database from the first version:** run `supabase/schema.sql` again. The `v2` block at the end only adds the new columns.
 

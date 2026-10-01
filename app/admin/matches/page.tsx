@@ -117,6 +117,8 @@ function Editor({ m, state, onSaved, toast }: {
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn-primary" style={{ flex: 1 }} disabled={busy} onClick={() => send()}>{busy ? '…' : L.save}</button>
         {r && <button className="btn-danger btn-sm" disabled={busy} onClick={() => clear()}>Clear</button>}
+        {r && <a className="btn btn-sm" href={`/print?form=f3&match=${m.code}`} target="_blank">F3 PDF ↗</a>}
+        {r && <a className="btn btn-sm" href={`/api/admin/export?form=f3&match=${m.code}`}>F3 Excel</a>}
       </div>
       {edits.length > 0 && (
         <ul className="edit-log">

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AdminShell, Loading } from '@/components/AdminShell';
 import { useAppState, teamName } from '@/lib/client';
 import { matchLabel, fmtDate, L } from '@/lib/labels';
+import { Wordmark } from '@/components/Wordmark';
 
 export default function AdminHome() {
   const { state, error } = useAppState({ admin: true, poll: 5000 });
@@ -19,7 +20,7 @@ export default function AdminHome() {
   return (
     <AdminShell state={state}>
       <div className="card">
-        <h1>{state.event.name}</h1>
+        <h1><Wordmark name={state.event.name} /></h1>
         <div className="muted">{fmtDate(state.event.date) || 'No date set'} · {state.event.drawMode === 'manual' ? 'Manual draw' : 'On-screen random draw'}</div>
       </div>
 
@@ -55,11 +56,20 @@ export default function AdminHome() {
         </div>
         <div className="card">
           <h3>4 · Export</h3>
-          <p className="small muted">One Excel file laid out like forms F1–F3. Also the backup.</p>
-          <div className="row">
-            <a className="btn btn-primary btn-sm" href="/api/admin/export">Download</a>
-            <Link className="btn btn-sm" href="/print" target="_blank">Print page ↗</Link>
-          </div>
+          <p className="small muted">Each form on its own, or everything at once. The Excel file is also the backup.</p>
+          <table className="tbl exp">
+            <tbody>
+              {([['f1', 'F1 Qualifying'], ['f2', 'F2 Draw'], ['f3', 'F3 Match results'], ['all', 'All forms']] as const).map(([f, label]) => (
+                <tr key={f}>
+                  <td><b>{label}</b></td>
+                  <td className="num">
+                    <a className="btn btn-sm" href={f === 'all' ? '/print' : `/print?form=${f}`} target="_blank">PDF ↗</a>{' '}
+                    <a className="btn btn-sm" href={`/api/admin/export${f === 'all' ? '' : `?form=${f}`}`}>Excel</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

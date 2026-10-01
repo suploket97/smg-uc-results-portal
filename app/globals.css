@@ -40,6 +40,10 @@ h1, h2, h3 { font-family: var(--font-head); font-weight: 400; letter-spacing: 0.
 h1 { font-size: 2.2rem; }
 h2 { font-size: 1.6rem; }
 h3 { font-size: 1.25rem; }
+.wordmark { font-family: var(--font-head); font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
+.wordmark .wm-a { color: var(--accent); }
+.wordmark .wm-b { color: var(--text); }
+.wordmark.wm-sm { font-size: 1.1rem; }
 .th { font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
 .muted { color: var(--muted); }
 .dim { color: var(--dim); }
@@ -99,7 +103,7 @@ label.field > span { display: block; font-size: 0.85rem; color: var(--muted); ma
   border-bottom: 1px solid var(--line);
 }
 .admin-top .bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; max-width: 980px; margin: 0 auto; }
-.admin-top .brand { font-family: var(--font-head); font-size: 1.35rem; color: var(--accent); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.admin-top .brand { font-family: var(--font-head); font-size: 1.25rem; min-width: 0; color: var(--text); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .admin-nav { display: flex; gap: 4px; overflow-x: auto; padding: 0 12px 8px; max-width: 980px; margin: 0 auto; scrollbar-width: none; }
 .admin-nav a {
   flex: none; padding: 8px 12px; border-radius: 999px; color: var(--muted); text-decoration: none;
@@ -176,7 +180,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
   overflow: hidden; color: var(--text);
 }
 .stage-head { position: absolute; left: 64px; right: 64px; top: 40px; height: 110px; display: flex; align-items: flex-end; gap: 28px; }
-.stage-head .ev { font-family: var(--font-head); font-size: 40px; color: var(--muted); letter-spacing: 0.06em; line-height: 1; }
+.stage-head .ev { font-family: var(--font-head); font-size: 40px; color: var(--text); letter-spacing: 0.06em; line-height: 1; }
 .stage-head .title { font-family: var(--font-head); font-size: 96px; line-height: 0.9; color: var(--text); letter-spacing: 0.02em; }
 .stage-head .title .th { font-size: 44px; color: var(--accent); margin-left: 18px; vertical-align: 14px; }
 .stage-head .right { margin-left: auto; text-align: right; font-size: 26px; color: var(--muted); }
@@ -278,6 +282,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
   --form-accent: #d97706; --note: #fff8eb; --note-line: #f3d9a4;
   background: #8a8a90; color: var(--ink); min-height: 100vh; padding: 20px 12px; font-family: var(--font-body);
 }
+.fd-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fd-pick button, .fd-pick select, .fd-pick .btn { min-height: 38px; padding: 6px 12px; font-size: 0.85rem; width: auto; background: #fff; color: #111114; border: 1px solid #c9c9cf; }
+.fd-pick .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.fd-pick button.on { background: #111114; color: #fff; border-color: #111114; }
 .fd-toolbar { max-width: 210mm; margin: 0 auto 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; color: #fff; font-size: 0.85rem; }
 .fd-page {
   width: 210mm; max-width: 100%; min-height: 297mm; margin: 0 auto 18px; padding: 12mm 13mm 9mm; background: var(--paper);

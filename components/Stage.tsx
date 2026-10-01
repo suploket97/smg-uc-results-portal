@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '@/lib/labels';
 import type { AppState } from '@/lib/types';
+import { Wordmark } from './Wordmark';
 
 /**
  * A fixed 1920×1080 canvas scaled to fit any window (letterboxed).
@@ -45,7 +46,7 @@ export function Stage({
       <div className="stage" style={{ transform: `translate(${box.x}px, ${box.y}px) scale(${box.s})`, visibility: box.s ? 'visible' : 'hidden' }}>
         <div className="stage-head">
           <div>
-            <div className="ev">{state?.event.name ?? 'Samaggi University Challenge'}</div>
+            <div className="ev"><Wordmark name={state?.event.name} /></div>
             <div className="title">{title}</div>
           </div>
           <div className="right">{right ?? fmtDate(state?.event.date)}</div>
