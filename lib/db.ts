@@ -5,13 +5,28 @@ types.setTypeParser(20, (v: string) => Number(v)); // int8
 types.setTypeParser(1700, (v: string) => parseFloat(v)); // numeric
 types.setTypeParser(1082, (v: string) => v); // date → 'YYYY-MM-DD'
 
+/**
+ * The connection string. DATABASE_URL if set; otherwise the names the Vercel ↔ Supabase
+ * integration creates (POSTGRES_URL is the pooled one, which suits serverless functions).
+ */
+export const DB_ENV_NAMES = ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'POSTGRES_URL_NON_POOLING'] as const;
+
+export function databaseUrl(): { name: string; value: string } | null {
+  for (const name of DB_ENV_NAMES) {
+    const value = process.env[name];
+    if (value) return { name, value };
+  }
+  return null;
+}
+
 function makePool(): Pool {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) throw new Error('DATABASE_URL is not set. See README → Setup.');
-  const url = new URL(raw);
+  const found = databaseUrl();
+  if (!found) throw new Error('No database connection string. Set DATABASE_URL (or connect Supabase in Vercel, which sets POSTGRES_URL).');
+  const url = new URL(found.value);
   const local = ['localhost', '127.0.0.1'].includes(url.hostname) || process.env.DATABASE_SSL === 'disable';
   // Supabase needs SSL; its certificate chain isn't in Node's default store.
-  url.searchParams.delete('sslmode');
+  // The integration's URLs also carry options meant for other clients.
+  for (const k of ['sslmode', 'supa', 'pgbouncer', 'connection_limit']) url.searchParams.delete(k);
   return new Pool({
     connectionString: url.toString(),
     ssl: local ? undefined : { rejectUnauthorized: false },

@@ -48,7 +48,8 @@ export async function verifyToken(token: string | undefined | null): Promise<boo
 export function checkPassword(pw: string): boolean {
   const real = process.env.ADMIN_PASSWORD;
   if (!real) throw new Error('ADMIN_PASSWORD is not set');
-  return safeEqual(pw, real);
+  // ignore stray spaces/new lines that sneak in when pasting into the Vercel dashboard
+  return safeEqual(pw.trim(), real.trim());
 }
 
 export function readCookie(req: Request, name = COOKIE): string | null {

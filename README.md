@@ -26,7 +26,7 @@ or `git init && git add . && git commit -m "Results portal" && git push`).
 
    | Name | Value |
    |---|---|
-   | `DATABASE_URL` | the Supabase Transaction pooler string from step 1 |
+   | `DATABASE_URL` | the Supabase Transaction pooler string from step 1. Not needed if you connected Supabase through Vercel's Supabase integration: the app then uses the `POSTGRES_URL` it creates. |
    | `ADMIN_PASSWORD` | the one admin password |
    | `CRON_SECRET` | optional, any long random text (protects the keep-alive URL) |
    | `EVENT_TIMEZONE` | optional, default `Europe/London` (times in the Excel export) |
@@ -45,6 +45,17 @@ npm test                       # bracket, import and Excel tests
 ```
 
 ---
+
+### If something does not work: `/setup-check`
+Open `https://<your-app>.vercel.app/setup-check`. It shows, without revealing any password, whether
+`ADMIN_PASSWORD` and `DATABASE_URL` are set, whether the database answers, and whether the tables
+and the latest columns exist, with what to fix for each.
+
+- **"Login failed" / "ADMIN_PASSWORD is not set"**: add `ADMIN_PASSWORD` in Vercel, then **redeploy**
+  (Deployments → ⋯ → Redeploy). Vercel only applies new environment variables to new deployments.
+- **"Wrong password"**: the password typed differs from `ADMIN_PASSWORD`.
+- **Database errors**: use the *Transaction pooler* string (port 6543), with the real database password
+  in place of `[YOUR-PASSWORD]`. URL-encode special characters in that password (`@` → `%40`, `#` → `%23`).
 
 ## On the day
 

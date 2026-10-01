@@ -18,7 +18,7 @@ export default function LoginPage() {
     if (res?.ok) {
       const next = new URLSearchParams(window.location.search).get('next');
       window.location.href = next && next.startsWith('/') ? next : '/admin';
-    } else setErr(j.error || 'Login failed');
+    } else setErr(j.error || `Login failed: the server returned an error (${res?.status ?? 'no response'}). Open /setup-check to see what is missing.`);
   }
 
   return (
