@@ -25,9 +25,9 @@ const FORM_SHEETS: Record<ExportForm, string[]> = {
   f3: ['F3 Matches', 'Edit log'],
 };
 
-export async function buildExport(form: ExportForm = 'all', matchCode?: string): Promise<{ buffer: Buffer; filename: string }> {
-  const state = await buildState(true);
-  const draws = await allDrawsWithResults();
+export async function buildExport(form: ExportForm = 'all', matchCode?: string, competitionId?: number | null): Promise<{ buffer: Buffer; filename: string }> {
+  const state = await buildState(true, competitionId);
+  const draws = await allDrawsWithResults(state.competition.id);
   const names = state.teamNames;
   const nos = state.teamNos;
   const name = (id: number | null | undefined) => (id == null ? '' : names[id] ?? `#${id}`);
@@ -188,5 +188,5 @@ export async function buildExport(form: ExportForm = 'all', matchCode?: string):
   const safe = state.event.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'results';
   const stamp = new Date().toISOString().slice(0, 10);
   const part = form === 'all' ? 'all-forms' : form === 'f1' ? 'F1-Qualifying' : form === 'f2' ? 'F2-Draw' : matchCode ? `F3-${matchCode}` : 'F3-Matches';
-  return { buffer, filename: `${safe}-${part}-${stamp}.xlsx` };
+  return { buffer, filename: `${safe}-${state.event.date ?? stamp}-${part}.xlsx` };
 }

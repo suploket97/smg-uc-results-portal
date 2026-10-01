@@ -77,6 +77,21 @@ and the latest columns exist, with what to fix for each.
 - `/screen/next` — big "Next match" card
 - `/screen/results` — champion, runner-up, third, and the qualifying standings
 
+### Next year: a new competition
+
+The portal keeps every competition (for example one per year) in the same database. Nothing is reset or deleted.
+
+- **Setup → Competitions → Start a new competition** opens a new, empty one and makes it the *current* one.
+  The admin pages and the projector pages always work on the current competition. Its date is shown under the name
+  at the top of every admin page.
+- Every earlier competition stays in the list with its own **Forms (PDF)**, **Excel** and **Results screen** buttons
+  (`/print?c=<id>`, `/api/admin/export?c=<id>`, `/screen/results?c=<id>`).
+- **Make current** switches back to an earlier one, for example to correct a result.
+- **Delete** is only for test runs: you have to type the competition's name, and the current one cannot be deleted.
+
+A database from an earlier version upgrades by itself on the first request after you deploy: the data already there
+becomes the first competition.
+
 ### Matching the paper forms F1–F4
 The paper forms (F1–F4, v2026-10) stay the signed official record; the portal is the clean digital copy.
 

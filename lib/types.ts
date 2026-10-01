@@ -106,7 +106,21 @@ export interface ArchivedDraw extends DrawInfo {
   resultCount: number;
 }
 
+/** One competition (for example one year) in the list on the Setup page. */
+export interface CompetitionSummary {
+  id: number;
+  name: string;
+  date: string | null;
+  createdAt: string;
+  current: boolean;
+  teamCount: number;
+  resultCount: number;
+  champion: string | null;
+}
+
 export interface AppState {
+  /** Which competition this state shows. current = the one the admin pages and screens work on. */
+  competition: { id: number; current: boolean };
   event: EventInfo;
   teams: Team[]; // active teams only
   teamNames: Record<number, string>; // every team ever, for history
@@ -120,5 +134,6 @@ export interface AppState {
     edits: MatchEdit[];
     history: ArchivedDraw[];
     uploads: UploadInfo[];
+    competitions: CompetitionSummary[];
   };
 }

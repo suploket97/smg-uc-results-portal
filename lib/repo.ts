@@ -7,7 +7,7 @@ import {
   MatchResult, ResultInput, MIN_TEAMS, MAX_TEAMS,
 } from './bracket';
 import type {
-  AppState, EventInfo, Team, Standing, DrawInfo, Placement, UploadInfo, MatchEdit, ArchivedDraw, DrawMode,
+  AppState, CompetitionSummary, EventInfo, Team, Standing, DrawInfo, Placement, UploadInfo, MatchEdit, ArchivedDraw, DrawMode,
 } from './types';
 import type { ParsedStandings } from './importer';
 import { suggestF1 } from './importer';
@@ -21,12 +21,92 @@ const iso = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? n
 
 // ------------------------------------------------------------------ event
 
-export async function getEvent(c?: Q): Promise<EventInfo> {
-  const rows = c
-    ? (await c.query('select * from event where id = 1')).rows
-    : await query('select * from event where id = 1');
+// ------------------------------------------------------------------ competitions
+// Each competition (for example each year) has its own teams, draws and results.
+// One of them is "current": the admin pages and the big screens work on it.
+
+const CURRENT_KEY = 'current_competition';
+
+export async function currentCompetitionId(c: Q): Promise<number> {
+  const { rows } = await c.query(
+    `select coalesce(
+       (select c.id from competitions c join settings s on s.key = $1 and s.value = c.id::text),
+       (select max(id) from competitions)) as id`,
+    [CURRENT_KEY],
+  );
+  if (rows[0]?.id == null) {
+    const ins = await c.query(`insert into competitions default values returning id`);
+    return ins.rows[0].id;
+  }
+  return rows[0].id;
+}
+
+async function setCurrent(c: Q, id: number) {
+  await c.query(
+    `insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value, updated_at = now()`,
+    [CURRENT_KEY, String(id)],
+  );
+}
+
+export async function getEvent(c: Q, cid: number): Promise<EventInfo> {
+  const rows = (await c.query('select * from competitions where id = $1', [cid])).rows;
   const r = rows[0] ?? { name: 'Samaggi University Challenge', event_date: null, qualifier_count: 8, draw_mode: 'manual', f1: {} };
   return { name: r.name, date: r.event_date, qualifierCount: r.qualifier_count, drawMode: r.draw_mode, f1: { ...EMPTY_F1, ...(r.f1 ?? {}) } };
+}
+
+export async function competitionAction(body: any) {
+  const action = String(body?.action ?? '');
+  return tx(async (c) => {
+    const cur = await currentCompetitionId(c);
+    if (action === 'create') {
+      const ev = await getEvent(c, cur);
+      const name = String(body.name ?? '').trim().slice(0, 120) || ev.name;
+      const date = String(body.date ?? '').trim() || null;
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new UserError('Invalid date');
+      const r = await c.query(
+        `insert into competitions (name, event_date, qualifier_count, draw_mode) values ($1, $2, $3, $4) returning id`,
+        [name, date, ev.qualifierCount, ev.drawMode],
+      );
+      await setCurrent(c, r.rows[0].id);
+      return { id: r.rows[0].id };
+    }
+    const id = Number(body.id);
+    const row = (await c.query('select id, name from competitions where id = $1', [id])).rows[0];
+    if (!row) throw new UserError('Competition not found', 404);
+    if (action === 'switch') {
+      await setCurrent(c, id);
+      return { id };
+    }
+    if (action === 'delete') {
+      if (id === cur) throw new UserError('This is the current competition. Switch to another one before deleting it.', 409);
+      if (String(body.confirmName ?? '').trim() !== String(row.name).trim()) {
+        throw new UserError('Type the competition name exactly to confirm');
+      }
+      // draws first (their placements and results point at the teams), then the rest
+      await c.query('delete from draws where competition_id = $1', [id]);
+      await c.query('delete from teams where competition_id = $1', [id]);
+      await c.query('delete from uploads where competition_id = $1', [id]);
+      await c.query('delete from competitions where id = $1', [id]);
+      return { id };
+    }
+    throw new UserError('Unknown action');
+  });
+}
+
+async function competitionList(c: Q, current: number): Promise<CompetitionSummary[]> {
+  const { rows } = await c.query(`
+    select c.id, c.name, c.event_date, c.created_at,
+      (select count(*)::int from teams t where t.competition_id = c.id and t.active and t.selected) as team_count,
+      (select count(*)::int from draws d join match_results r on r.draw_id = d.id
+         where d.competition_id = c.id and d.status <> 'archived') as result_count,
+      (select t.name from draws d join match_results r on r.draw_id = d.id and r.code = 'F'
+         join teams t on t.id = r.winner_id
+         where d.competition_id = c.id and d.status <> 'archived' limit 1) as champion
+    from competitions c order by c.event_date desc nulls first, c.id desc`);
+  return rows.map((r: any) => ({
+    id: r.id, name: r.name, date: r.event_date, createdAt: iso(r.created_at)!, current: r.id === current,
+    teamCount: r.team_count, resultCount: r.result_count, champion: r.champion ?? null,
+  }));
 }
 
 function cleanF1(input: unknown, cur: F1Info): F1Info {
@@ -52,7 +132,9 @@ function cleanF1(input: unknown, cur: F1Info): F1Info {
 }
 
 export async function updateEvent(input: Partial<EventInfo>): Promise<void> {
-  const cur = await getEvent();
+  return tx(async (c) => {
+  const cid = await currentCompetitionId(c);
+  const cur = await getEvent(c, cid);
   const name = (input.name ?? cur.name).trim() || cur.name;
   const date = input.date === undefined ? cur.date : input.date || null;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new UserError('Invalid date');
@@ -63,19 +145,19 @@ export async function updateEvent(input: Partial<EventInfo>): Promise<void> {
   const mode = (input.drawMode ?? cur.drawMode) as DrawMode;
   if (mode !== 'manual' && mode !== 'random') throw new UserError('Invalid draw mode');
   const f1 = input.f1 === undefined ? cur.f1 : cleanF1(input.f1, cur.f1);
-  await query(
-    `insert into event (id, name, event_date, qualifier_count, draw_mode, f1, updated_at)
-     values (1, $1, $2, $3, $4, $5, now())
-     on conflict (id) do update set name = $1, event_date = $2, qualifier_count = $3, draw_mode = $4, f1 = $5, updated_at = now()`,
-    [name, date, qc, mode, JSON.stringify(f1)],
+  await c.query(
+    `update competitions set name = $1, event_date = $2, qualifier_count = $3, draw_mode = $4, f1 = $5, updated_at = now() where id = $6`,
+    [name, date, qc, mode, JSON.stringify(f1), cid],
   );
+  });
 }
 
 // ------------------------------------------------------------------ helpers
 
-async function currentDrawRow(c: Q, lock = false) {
+async function currentDrawRow(c: Q, cid: number, lock = false) {
   const { rows } = await c.query(
-    `select * from draws where status <> 'archived' order by id desc limit 1${lock ? ' for update' : ''}`,
+    `select * from draws where competition_id = $1 and status <> 'archived' order by id desc limit 1${lock ? ' for update' : ''}`,
+    [cid],
   );
   return rows[0] ?? null;
 }
@@ -86,8 +168,8 @@ async function placementCount(c: Q, drawId: number): Promise<number> {
 }
 
 /** Team lists can change freely until the first lot is drawn. */
-async function assertTeamsEditable(c: Q) {
-  const d = await currentDrawRow(c, true);
+async function assertTeamsEditable(c: Q, cid: number) {
+  const d = await currentDrawRow(c, cid, true);
   if (!d) return;
   if ((await placementCount(c, d.id)) > 0) {
     throw new UserError('The draw has started. Use "Redo draw" before changing the team list.', 409);
@@ -100,13 +182,14 @@ async function assertTeamsEditable(c: Q) {
 export async function importStandings(file: { name: string; type: string; data: Buffer }, parsed: ParsedStandings) {
   const { rows, sheetName } = parsed;
   return tx(async (c) => {
-    await assertTeamsEditable(c);
+    const cid = await currentCompetitionId(c);
+    await assertTeamsEditable(c, cid);
     const up = await c.query(
-      `insert into uploads (filename, content_type, data, sheet_name, row_count, question_count) values ($1, $2, $3, $4, $5, $6) returning id`,
-      [file.name, file.type || null, file.data, sheetName, rows.length, parsed.questionCount],
+      `insert into uploads (filename, content_type, data, sheet_name, row_count, question_count, competition_id) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [file.name, file.type || null, file.data, sheetName, rows.length, parsed.questionCount, cid],
     );
     const uploadId = up.rows[0].id as number;
-    await c.query(`update teams set active = false where source = 'import' and active`);
+    await c.query(`update teams set active = false where competition_id = $1 and source = 'import' and active`, [cid]);
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const q = await c.query(
@@ -117,13 +200,13 @@ export async function importStandings(file: { name: string; type: string; data: 
           r.antiCheatFlags || null, r.tieBreak || null, r.teamNo || null],
       );
       await c.query(
-        `insert into teams (name, source, qualifying_row_id, qual_rank, qual_score, selected, team_no)
-         values ($1, 'import', $2, $3, $4, $5, $6)`,
-        [r.team, q.rows[0].id, r.rank, r.score, r.qualified, r.teamNo || null],
+        `insert into teams (name, source, qualifying_row_id, qual_rank, qual_score, selected, team_no, competition_id)
+         values ($1, 'import', $2, $3, $4, $5, $6, $7)`,
+        [r.team, q.rows[0].id, r.rank, r.score, r.qualified, r.teamNo || null, cid],
       );
     }
     // fill the F1 certificate with what the file tells us
-    const ev = await getEvent(c);
+    const ev = await getEvent(c, cid);
     const s = suggestF1(parsed, file.name);
     const f1: F1Info = {
       ...ev.f1,
@@ -134,8 +217,8 @@ export async function importStandings(file: { name: string; type: string; data: 
       cutDecidedBy: s.cutDecidedBy ?? (s.cutLevel === 'no' ? null : ev.f1.cutDecidedBy),
     };
     await c.query(
-      `update event set f1 = $1, event_date = coalesce(event_date, $2::date), updated_at = now() where id = 1`,
-      [JSON.stringify(f1), s.date],
+      `update competitions set f1 = $1, event_date = coalesce(event_date, $2::date), updated_at = now() where id = $3`,
+      [JSON.stringify(f1), s.date, cid],
     );
     return uploadId;
   });
@@ -151,12 +234,13 @@ export async function getUploadFile(id: number) {
 export async function teamAction(body: any) {
   const action = String(body?.action ?? '');
   return tx(async (c) => {
+    const cid = await currentCompetitionId(c);
     if (action === 'rename') {
       const name = String(body.name ?? '').trim();
       if (!name) throw new UserError('Team name cannot be empty');
-      const dup = await c.query('select 1 from teams where active and lower(name) = lower($1) and id <> $2', [name, body.id]);
+      const dup = await c.query('select 1 from teams where competition_id = $3 and active and lower(name) = lower($1) and id <> $2', [name, body.id, cid]);
       if (dup.rows.length) throw new UserError('A team with this name already exists');
-      const r = await c.query('update teams set name = $1 where id = $2 and active returning id', [name, body.id]);
+      const r = await c.query('update teams set name = $1 where id = $2 and competition_id = $3 and active returning id', [name, body.id, cid]);
       if (!r.rows.length) throw new UserError('Team not found', 404);
       // keep the live draw's snapshot in step
       await c.query(
@@ -168,16 +252,16 @@ export async function teamAction(body: any) {
     if (action === 'number') {
       const no = String(body.teamNo ?? '').trim().slice(0, 10);
       if (no) {
-        const dup = await c.query('select name from teams where active and team_no = $1 and id <> $2', [no, body.id]);
+        const dup = await c.query('select name from teams where competition_id = $3 and active and team_no = $1 and id <> $2', [no, body.id, cid]);
         if (dup.rows.length) throw new UserError(`Team No. ${no} is already used by ${dup.rows[0].name}`);
       }
-      const r = await c.query('update teams set team_no = $1 where id = $2 and active returning id', [no || null, body.id]);
+      const r = await c.query('update teams set team_no = $1 where id = $2 and competition_id = $3 and active returning id', [no || null, body.id, cid]);
       if (!r.rows.length) throw new UserError('Team not found', 404);
       return;
     }
-    await assertTeamsEditable(c);
+    await assertTeamsEditable(c, cid);
     if (action === 'select') {
-      const r = await c.query('update teams set selected = $1 where id = $2 and active returning id', [!!body.selected, body.id]);
+      const r = await c.query('update teams set selected = $1 where id = $2 and competition_id = $3 and active returning id', [!!body.selected, body.id, cid]);
       if (!r.rows.length) throw new UserError('Team not found', 404);
     } else if (action === 'add') {
       const names: string[] = (Array.isArray(body.names) ? body.names : [body.name])
@@ -188,14 +272,14 @@ export async function teamAction(body: any) {
         const m = line.match(/^(\d{1,4})\s*[,.\t:]?\s+(.+)$/);
         const name = m ? m[2].trim() : line;
         const no = m ? m[1] : null;
-        const dup = await c.query('select 1 from teams where active and lower(name) = lower($1)', [name]);
+        const dup = await c.query('select 1 from teams where competition_id = $2 and active and lower(name) = lower($1)', [name, cid]);
         if (dup.rows.length) throw new UserError(`"${name}" already exists`);
-        await c.query(`insert into teams (name, source, selected, team_no) values ($1, 'manual', true, $2)`, [name, no]);
+        await c.query(`insert into teams (name, source, selected, team_no, competition_id) values ($1, 'manual', true, $2, $3)`, [name, no, cid]);
       }
     } else if (action === 'remove') {
-      await c.query('update teams set active = false where id = $1', [body.id]);
+      await c.query('update teams set active = false where id = $1 and competition_id = $2', [body.id, cid]);
     } else if (action === 'clearAll') {
-      await c.query('update teams set active = false where active');
+      await c.query('update teams set active = false where competition_id = $1 and active', [cid]);
     } else {
       throw new UserError('Unknown action');
     }
@@ -212,27 +296,28 @@ async function loadPlacements(c: Q, drawId: number): Promise<Placement[]> {
   }));
 }
 
-async function selectedTeams(c: Q): Promise<{ id: number; name: string }[]> {
-  const { rows } = await c.query('select id, name from teams where active and selected order by qual_rank nulls last, id');
+async function selectedTeams(c: Q, cid: number): Promise<{ id: number; name: string }[]> {
+  const { rows } = await c.query('select id, name from teams where competition_id = $1 and active and selected order by qual_rank nulls last, id', [cid]);
   return rows;
 }
 
 export async function drawAction(body: any) {
   const action = String(body?.action ?? '');
   return tx(async (c) => {
-    const ev = await getEvent(c);
-    let d = await currentDrawRow(c, true);
+    const cid = await currentCompetitionId(c);
+    const ev = await getEvent(c, cid);
+    let d = await currentDrawRow(c, cid, true);
 
     if (action === 'start') {
       if (d) throw new UserError('A draw already exists', 409);
-      const teams = await selectedTeams(c);
+      const teams = await selectedTeams(c, cid);
       if (teams.length < MIN_TEAMS || teams.length > MAX_TEAMS) {
         throw new UserError(`Need ${MIN_TEAMS}–${MAX_TEAMS} ticked teams (now ${teams.length})`);
       }
       await c.query(
-        `insert into draws (status, mode, team_count, bracket_size, place, software) values ('open', $1, $2, $3, $4, $5)`,
+        `insert into draws (status, mode, team_count, bracket_size, place, software, competition_id) values ('open', $1, $2, $3, $4, $5, $6)`,
         [ev.drawMode, teams.length, bracketSize(teams.length), String(body.place ?? '').trim().slice(0, 120) || null,
-          ev.drawMode === 'random' ? RANDOM_SOFTWARE : null],
+          ev.drawMode === 'random' ? RANDOM_SOFTWARE : null, cid],
       );
       return;
     }
@@ -256,7 +341,7 @@ export async function drawAction(body: any) {
     const playable = playableSlots(d.team_count);
     const usedSlots = new Set(placements.map((p) => p.slot));
     const usedTeams = new Set(placements.map((p) => p.teamId));
-    const teams = await selectedTeams(c);
+    const teams = await selectedTeams(c, cid);
     if (teams.length !== d.team_count) {
       throw new UserError('The team list changed after the draw started. Redo the draw.', 409);
     }
@@ -326,7 +411,7 @@ async function teamNameMap(c: Q): Promise<Map<number, string>> {
 }
 
 async function lockedBracket(c: Q) {
-  const d = await currentDrawRow(c, true);
+  const d = await currentDrawRow(c, await currentCompetitionId(c), true);
   if (!d) throw new UserError('No draw yet', 409);
   if (d.status !== 'locked') throw new UserError('Lock the draw before entering scores', 409);
   const placements = await loadPlacements(c, d.id);
@@ -435,11 +520,19 @@ function drawInfo(r: any, placements: Placement[]): DrawInfo {
   };
 }
 
-export async function buildState(admin: boolean): Promise<AppState> {
+/** viewId: show that competition instead of the current one (read-only views, print, export). */
+export async function buildState(admin: boolean, viewId?: number | null): Promise<AppState> {
   return tx(async (c) => {
     await c.query('set transaction read only');
-    const event = await getEvent(c);
-    const teamRows = (await c.query('select * from teams order by qual_rank nulls last, id')).rows;
+    const current = await currentCompetitionId(c);
+    let cid = current;
+    if (viewId != null && viewId !== current) {
+      const ok = (await c.query('select 1 from competitions where id = $1', [viewId])).rows.length;
+      if (!ok) throw new UserError('Competition not found', 404);
+      cid = viewId;
+    }
+    const event = await getEvent(c, cid);
+    const teamRows = (await c.query('select * from teams where competition_id = $1 order by qual_rank nulls last, id', [cid])).rows;
     const teams: Team[] = teamRows.filter((t: any) => t.active).map((t: any) => ({
       id: t.id, teamNo: t.team_no ?? null, name: t.name, source: t.source, selected: t.selected, qualRank: t.qual_rank, qualScore: t.qual_score,
       qualifyingRowId: t.qualifying_row_id,
@@ -449,7 +542,7 @@ export async function buildState(admin: boolean): Promise<AppState> {
     teamRows.forEach((t: any) => { teamNames[t.id] = t.name; if (t.team_no) teamNos[t.id] = t.team_no; });
 
     const upRows = (await c.query(
-      'select id, filename, sheet_name, row_count, question_count, uploaded_at from uploads order by id desc',
+      'select id, filename, sheet_name, row_count, question_count, uploaded_at from uploads where competition_id = $1 order by id desc', [cid],
     )).rows;
     const uploads: UploadInfo[] = upRows.map((u: any) => ({
       id: u.id, filename: u.filename, sheetName: u.sheet_name, rowCount: u.row_count, questionCount: u.question_count ?? null,
@@ -464,7 +557,7 @@ export async function buildState(admin: boolean): Promise<AppState> {
         }))
       : [];
 
-    const dRow = await currentDrawRow(c);
+    const dRow = await currentDrawRow(c, cid);
     let draw: DrawInfo | null = null;
     let bracket = null;
     if (dRow) {
@@ -475,18 +568,22 @@ export async function buildState(admin: boolean): Promise<AppState> {
       if (draw.status !== 'locked') bracket.nextCode = null;
     }
 
-    const state: AppState = { event, teams, teamNames, teamNos, standings, upload, draw, bracket, serverTime: new Date().toISOString() };
+    const state: AppState = {
+      competition: { id: cid, current: cid === current }, event, teams, teamNames, teamNos, standings, upload, draw, bracket,
+      serverTime: new Date().toISOString(),
+    };
 
     if (admin) {
-      const edits: MatchEdit[] = (await c.query('select * from match_edits order by edited_at desc, id desc limit 500')).rows.map((e: any) => ({
+      const edits: MatchEdit[] = (await c.query(`select e.* from match_edits e join draws d on d.id = e.draw_id where d.competition_id = $1
+                       order by e.edited_at desc, e.id desc limit 500`, [cid])).rows.map((e: any) => ({
         id: e.id, drawId: e.draw_id, code: e.code, action: e.action, oldValue: e.old_value, newValue: e.new_value,
         note: e.note, editedAt: iso(e.edited_at)!,
       }));
       const hist = (await c.query(`select d.*, (select count(*)::int from match_results r where r.draw_id = d.id) as result_count
-                                   from draws d where status = 'archived' order by id desc`)).rows;
+                                   from draws d where competition_id = $1 and status = 'archived' order by id desc`, [cid])).rows;
       const history: ArchivedDraw[] = [];
       for (const h of hist) history.push({ ...drawInfo(h, await loadPlacements(c, h.id)), resultCount: h.result_count });
-      state.admin = { edits, history, uploads };
+      state.admin = { edits, history, uploads, competitions: await competitionList(c, current) };
     }
     return state;
   });
@@ -494,8 +591,8 @@ export async function buildState(admin: boolean): Promise<AppState> {
 
 // ------------------------------------------------------------------ export data
 
-export async function allDrawsWithResults() {
-  const draws = await query(`select * from draws order by (status = 'archived'), id desc`);
+export async function allDrawsWithResults(cid: number) {
+  const draws = await query(`select * from draws where competition_id = $1 order by (status = 'archived'), id desc`, [cid]);
   const out: { draw: DrawInfo; results: MatchResult[] }[] = [];
   for (const d of draws) {
     const placements = (await query('select * from draw_placements where draw_id = $1 order by pick_order', [d.id])).map((r: any) => ({

@@ -346,3 +346,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
   .fd-page:last-child { break-after: auto; }
   @page { size: A4; margin: 13mm; }
 }
+
+/* Competitions list (Setup) */
+.comp-list { display: grid; gap: 10px; }
+.comp-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--bg-2, transparent); display: grid; gap: 8px; }
+.comp-item.on { border-color: var(--accent); }
+.comp-new { border-top: 1px solid var(--line); padding-top: 14px; }
+.comp-new h3 { margin: 0; }
+.admin-top .comp-date { display: block; font-family: var(--font-body); font-size: 0.72rem; font-weight: 600; letter-spacing: 0; line-height: 1.2; color: var(--muted); text-decoration: none; }
+.fd-past { background: #7c2d12; color: #fff; padding: 4px 10px; border-radius: 8px; }

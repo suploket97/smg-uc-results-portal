@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { UserError } from './db';
 import { buildState } from './repo';
+
+/** ?c=<id> picks a competition other than the current one (read-only views). */
+export function viewParam(req: Request): number | null {
+  const v = new URL(req.url).searchParams.get('c');
+  const n = v ? Number(v) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 import { isAdmin } from './auth';
 
 export function json(data: unknown, status = 200) {

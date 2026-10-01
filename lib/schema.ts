@@ -1,7 +1,7 @@
 // The same SQL as supabase/schema.sql (a test keeps them identical).
 // The app runs it by itself on first use, so the tables exist even if nobody ran the file by hand.
 // Every statement is safe to repeat.
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = '4';
 
 export const SCHEMA_SQL = `-- Samaggi University Challenge — Results Portal
 -- Run this once in Supabase: SQL Editor → New query → paste → Run.
@@ -11,6 +11,7 @@ export const SCHEMA_SQL = `-- Samaggi University Challenge — Results Portal
 -- Row Level Security is switched on with no policies: the public anon key
 -- cannot read or write anything.
 
+-- Before v4 this single row held the event. v4 copies it into "competitions".
 create table if not exists event (
   id              int primary key default 1 check (id = 1),
   name            text not null default 'Samaggi University Challenge',
@@ -75,7 +76,7 @@ create table if not exists draws (
   locked_at    timestamptz,
   archived_at  timestamptz
 );
-create unique index if not exists draws_one_current on draws ((true)) where status <> 'archived';
+-- (v4 replaces the old one-current-draw index with one per competition, below)
 
 create table if not exists draw_placements (
   draw_id    bigint not null references draws(id) on delete cascade,
@@ -151,6 +152,41 @@ create table if not exists settings (
   updated_at timestamptz not null default now()
 );
 alter table settings enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- v4: one row per competition (for example one per year). Starting a new one
+-- keeps every earlier competition, with its teams, draws, results and edit log.
+create table if not exists competitions (
+  id              bigserial primary key,
+  name            text not null default 'Samaggi University Challenge',
+  event_date      date,
+  qualifier_count int  not null default 8 check (qualifier_count between 2 and 16),
+  draw_mode       text not null default 'manual' check (draw_mode in ('manual', 'random')),
+  f1              jsonb not null default '{}'::jsonb,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+alter table competitions enable row level security;
+-- The data that existed before v4 becomes the first competition.
+insert into competitions (id, name, event_date, qualifier_count, draw_mode, f1, created_at, updated_at)
+  select 1, name, event_date, qualifier_count, draw_mode, f1, updated_at, updated_at from event
+  where id = 1 and not exists (select 1 from competitions);
+insert into competitions (id) select 1 where not exists (select 1 from competitions);
+select setval(pg_get_serial_sequence('competitions', 'id'), (select max(id) from competitions));
+
+alter table uploads add column if not exists competition_id bigint references competitions(id) on delete cascade;
+alter table teams   add column if not exists competition_id bigint references competitions(id) on delete cascade;
+alter table draws   add column if not exists competition_id bigint references competitions(id) on delete cascade;
+update uploads set competition_id = (select min(id) from competitions) where competition_id is null;
+update teams   set competition_id = (select min(id) from competitions) where competition_id is null;
+update draws   set competition_id = (select min(id) from competitions) where competition_id is null;
+alter table uploads alter column competition_id set not null;
+alter table teams   alter column competition_id set not null;
+alter table draws   alter column competition_id set not null;
+create index if not exists uploads_competition_idx on uploads (competition_id);
+create index if not exists teams_competition_idx   on teams (competition_id);
+drop index if exists draws_one_current;
+create unique index if not exists draws_one_current_per_competition on draws (competition_id) where status <> 'archived';
 
 -- ===> Set the admin password: change the text in quotes, then run this line. <===
 -- (The app replaces it with a salted hash the first time someone signs in.

@@ -1,5 +1,5 @@
 import { buildExport, type ExportForm } from '@/lib/exporter';
-import { errorResponse, requireAdmin } from '@/lib/api';
+import { errorResponse, requireAdmin, viewParam } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const f = sp.get('form');
     const form: ExportForm = f === 'f1' || f === 'f2' || f === 'f3' ? f : 'all';
     const match = sp.get('match')?.toUpperCase().replace(/[^A-Z0-9-]/g, '') || undefined;
-    const { buffer, filename } = await buildExport(form, match);
+    const { buffer, filename } = await buildExport(form, match, viewParam(req));
     return new Response(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

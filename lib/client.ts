@@ -13,6 +13,13 @@ export interface ApiResult {
   [k: string]: unknown;
 }
 
+/** ?c=<id> in the page address shows an earlier competition (screens and print only). */
+export function viewingCompetition(): string | null {
+  if (typeof window === 'undefined') return null;
+  const c = new URLSearchParams(window.location.search).get('c');
+  return c && /^\d+$/.test(c) ? c : null;
+}
+
 function toLogin() {
   if (typeof window !== 'undefined') {
     window.location.href = `/admin/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
@@ -30,7 +37,8 @@ export function useAppState({ admin = false, poll = 0 }: { admin?: boolean; poll
     if (busy.current) return;
     busy.current = true;
     try {
-      const res = await fetch(admin ? '/api/admin/state' : '/api/state', { cache: 'no-store' });
+      const c = viewingCompetition();
+      const res = await fetch((admin ? '/api/admin/state' : '/api/state') + (c && !admin ? `?c=${c}` : ''), { cache: 'no-store' });
       if (res.status === 401 && admin) return toLogin();
       const j = await res.json();
       if (!res.ok) setError(j.error || `Error ${res.status}`);

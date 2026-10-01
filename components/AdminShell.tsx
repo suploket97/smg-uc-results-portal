@@ -21,7 +21,14 @@ export function AdminShell({ state, children }: { state: AppState | null; childr
     <>
       <header className="admin-top">
         <div className="bar">
-          <div className="brand"><Wordmark name={state?.event.name} /></div>
+          <div className="brand">
+            <Wordmark name={state?.event.name} />
+            {state?.event.date && (
+              <Link href="/admin/setup" className="comp-date" title="Current competition. Change it in Setup → Competitions.">
+                {new Date(state.event.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </Link>
+            )}
+          </div>
           <div className="spacer" />
           <Link className="btn btn-sm btn-ghost" href="/screen" target="_blank">Screens ↗</Link>
           <button

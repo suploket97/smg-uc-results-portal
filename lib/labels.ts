@@ -1,4 +1,4 @@
-// Bilingual labels. Thai first, then English: "Team".
+// Labels shown in the app. English only; text typed by users may be Thai.
 import type { RoundKey } from './bracket';
 
 export const ROUND_EN: Record<RoundKey, string> = {

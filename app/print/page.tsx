@@ -3,7 +3,7 @@
 // The portal fills in what it knows; signatures and anything it does not record
 // (clock stops, voided questions, judge's remarks …) are left blank to complete in pen.
 import { useEffect, useState } from 'react';
-import { useAppState } from '@/lib/client';
+import { useAppState, viewingCompetition } from '@/lib/client';
 import { slotLabel, decidedBy, bracketSkeleton, type BracketMatch, type Source } from '@/lib/bracket';
 import { matchLabel, fmtDate, fmtTime } from '@/lib/labels';
 import type { AppState } from '@/lib/types';
@@ -83,15 +83,21 @@ export default function PrintPage() {
   }, []);
   const choose = (form: FormSel, match = '') => {
     setSel({ form, match });
-    const q = form === 'all' ? '' : `?form=${form}${match ? `&match=${match}` : ''}`;
+    const sp = new URLSearchParams();
+    const c = viewingCompetition();
+    if (c) sp.set('c', c);
+    if (form !== 'all') sp.set('form', form);
+    if (match) sp.set('match', match);
+    const q = sp.toString() ? `?${sp}` : '';
     try { window.history.replaceState(null, '', `${window.location.pathname}${q}`); } catch { /* not allowed in some embeds */ }
   };
   // the browser uses the page title as the file name for "Save as PDF"
   useEffect(() => {
     const name = state?.event.name ?? 'Samaggi University Challenge';
     const part = sel.form === 'all' ? 'F1-F3' : sel.form === 'f1' ? 'F1 Qualifying' : sel.form === 'f2' ? 'F2 Draw' : sel.match ? `F3 ${sel.match}` : 'F3 Matches';
-    document.title = `${name} - ${part}`;
-  }, [sel, state?.event.name]);
+    const when = state?.event.date ? ` ${state.event.date}` : '';
+    document.title = `${name}${when} - ${part}`;
+  }, [sel, state?.event.name, state?.event.date]);
   if (!state) return <div className="print-page">{error ?? 'Loading…'}</div>;
   return <Forms state={state} sel={sel} choose={choose} />;
 }
@@ -109,7 +115,8 @@ function Forms({ state, sel, choose }: { state: AppState; sel: { form: FormSel; 
   const allPlayed = b && d?.status === 'locked' ? b.matches.filter((m) => m.status === 'done') : [];
   const played = sel.match ? allPlayed.filter((m) => m.code === sel.match) : allPlayed;
   const show = (f: 'f1' | 'f2' | 'f3') => sel.form === 'all' || sel.form === f;
-  const xlsx = (f: string, m?: string) => `/api/admin/export?form=${f}${m ? `&match=${m}` : ''}`;
+  const c = viewingCompetition();
+  const xlsx = (f: string, m?: string) => `/api/admin/export?form=${f}${m ? `&match=${m}` : ''}${c ? `&c=${c}` : ''}`;
 
   return (
     <div className="print-page fd">
@@ -131,6 +138,9 @@ function Forms({ state, sel, choose }: { state: AppState; sel: { form: FormSel; 
           <button className="btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
           <a className="btn" href={xlsx(sel.form, sel.form === 'f3' ? sel.match : '')}>Download Excel</a>
         </div>
+        {!state.competition.current && (
+          <span className="fd-past">Earlier competition: <b>{state.event.name}{state.event.date ? ` · ${date}` : ''}</b></span>
+        )}
         <span>Showing {sel.form === 'all' ? 'F1, F2 and F3' : sel.form.toUpperCase()}{sel.match ? ` · ${sel.match}` : ''} ({VERSION}). Sign the printed copies in pen. F4 and the per-question F3 sheets stay on paper.</span>
       </div>
 
